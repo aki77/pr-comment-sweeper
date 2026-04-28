@@ -1,0 +1,113 @@
+.pcs-checkbox {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  z-index: 5;
+  cursor: pointer;
+  accent-color: #1f6feb;
+}
+
+#pcs-action-bar {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #0d1117;
+  color: #f0f6fc;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(1, 4, 9, 0.6);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+}
+
+#pcs-action-bar[hidden] {
+  display: none;
+}
+
+.pcs-count {
+  font-weight: 600;
+  padding: 2px 8px;
+  background: #1f6feb;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.pcs-select {
+  background: #161b22;
+  color: #f0f6fc;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pcs-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pcs-btn {
+  background: #21262d;
+  color: #f0f6fc;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pcs-btn:hover:not(:disabled) {
+  background: #30363d;
+}
+
+.pcs-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pcs-btn-primary {
+  background: #238636;
+  border-color: #2ea043;
+}
+
+.pcs-btn-primary:hover:not(:disabled) {
+  background: #2ea043;
+}
+
+.pcs-status {
+  color: #8b949e;
+  font-size: 12px;
+  min-width: 0;
+}
+
+#pcs-toast {
+  position: fixed;
+  bottom: 72px;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  z-index: 10000;
+  padding: 8px 16px;
+  background: #0d1117;
+  color: #f0f6fc;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  font-size: 13px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+#pcs-toast.pcs-toast-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}

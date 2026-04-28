@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PR Comment Sweeper</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <main>
+      <h1>PR Comment Sweeper</h1>
+      <p class="hint">
+        Fine-grained PAT with <code>Pull requests: Read &amp; write</code>.
+      </p>
+      <form id="pat-form">
+        <label for="pat">Personal Access Token</label>
+        <input id="pat" type="password" autocomplete="off" placeholder="ghp_..." />
+        <div class="row">
+          <button type="submit">Save</button>
+          <button type="button" id="clear">Clear</button>
+        </div>
+        <p id="status" class="status" aria-live="polite"></p>
+      </form>
+    </main>
+    <script type="module" src="./popup.ts"></script>
+  </body>
+</html>
