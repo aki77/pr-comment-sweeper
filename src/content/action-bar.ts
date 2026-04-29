@@ -1,27 +1,21 @@
-import type { MinimizeRequest, MinimizeResponse } from '../lib/messages'
 import { CLASSIFIER_OPTIONS, type ReportedContentClassifier } from '../types'
-import { uncheckById } from './checkbox'
+import { markCommentAsMinimized, minimizeComment } from './minimize'
 import { selection } from './selection'
 
-let bar: HTMLDivElement | null = null
-let countBadge: HTMLSpanElement
-let classifierSelect: HTMLSelectElement
-let hideButton: HTMLButtonElement
-let clearButton: HTMLButtonElement
-let statusText: HTMLSpanElement
-let toastEl: HTMLDivElement | null = null
+let mounted = false
 
 export function mountActionBar() {
-  if (bar) return
+  if (mounted) return
+  mounted = true
 
-  bar = document.createElement('div')
+  const bar = document.createElement('div')
   bar.id = 'pcs-action-bar'
   bar.hidden = true
 
-  countBadge = document.createElement('span')
+  const countBadge = document.createElement('span')
   countBadge.className = 'pcs-count'
 
-  classifierSelect = document.createElement('select')
+  const classifierSelect = document.createElement('select')
   classifierSelect.className = 'pcs-select'
   classifierSelect.setAttribute('aria-label', 'Reason')
   for (const opt of CLASSIFIER_OPTIONS) {
@@ -31,98 +25,92 @@ export function mountActionBar() {
     classifierSelect.append(option)
   }
 
-  hideButton = document.createElement('button')
-  hideButton.type = 'button'
-  hideButton.className = 'pcs-btn pcs-btn-primary'
-  hideButton.textContent = 'Hide'
-  hideButton.addEventListener('click', () => {
-    void runHide()
-  })
-
-  clearButton = document.createElement('button')
-  clearButton.type = 'button'
-  clearButton.className = 'pcs-btn'
-  clearButton.textContent = 'Clear'
-  clearButton.addEventListener('click', () => {
-    for (const id of selection.values()) uncheckById(id)
-    selection.clear()
-  })
-
-  statusText = document.createElement('span')
+  const statusText = document.createElement('span')
   statusText.className = 'pcs-status'
+
+  const setBusy = (busy: boolean) => {
+    hideButton.disabled = busy
+    clearButton.disabled = busy
+    classifierSelect.disabled = busy
+  }
+
+  const runHide = async () => {
+    const ids = selection.values()
+    if (ids.length === 0) return
+    const classifier = classifierSelect.value as ReportedContentClassifier
+
+    setBusy(true)
+    let succeeded = 0
+    const failed: { id: string; error: string }[] = []
+
+    for (const [index, id] of ids.entries()) {
+      statusText.textContent = `${index + 1} / ${ids.length} hidden...`
+      const commentEl = selection.commentEl(id)
+      if (!commentEl) {
+        failed.push({ id, error: 'comment element gone' })
+        continue
+      }
+      const outcome = await minimizeComment(commentEl, classifier)
+      if (outcome.ok) {
+        succeeded += 1
+        markCommentAsMinimized(commentEl)
+        selection.delete(id)
+      } else {
+        failed.push({ id, error: outcome.error })
+      }
+    }
+
+    statusText.textContent = ''
+    setBusy(false)
+    showToast(summarize(succeeded, failed))
+  }
+
+  const hideButton = makeButton({
+    label: 'Hide',
+    primary: true,
+    onClick: () => {
+      void runHide()
+    },
+  })
+
+  const clearButton = makeButton({
+    label: 'Clear',
+    onClick: () => selection.clear(),
+  })
 
   bar.append(countBadge, classifierSelect, hideButton, clearButton, statusText)
   document.body.append(bar)
 
   selection.subscribe((size) => {
-    if (!bar) return
     bar.hidden = size === 0
     countBadge.textContent = `${size} selected`
     hideButton.textContent = size > 0 ? `Hide ${size}` : 'Hide'
   })
 }
 
-async function runHide() {
-  const ids = selection.values()
-  if (ids.length === 0) return
+function makeButton(opts: {
+  label: string
+  primary?: boolean
+  onClick: () => void
+}): HTMLButtonElement {
+  const btn = document.createElement('button')
+  btn.type = 'button'
+  btn.className = opts.primary ? 'pcs-btn pcs-btn-primary' : 'pcs-btn'
+  btn.textContent = opts.label
+  btn.addEventListener('click', opts.onClick)
+  return btn
+}
 
-  const classifier = classifierSelect.value as ReportedContentClassifier
-
-  setBusy(true)
-  let succeeded = 0
-  const failed: { id: string; error: string }[] = []
-
-  for (const [index, id] of ids.entries()) {
-    statusText.textContent = `${index} / ${ids.length} hidden...`
-    const response = await sendMinimize(id, classifier)
-    if (response.ok && response.isMinimized) {
-      succeeded += 1
-      uncheckById(id)
-      selection.delete(id)
-    } else {
-      const error = response.ok ? 'not minimized' : response.error
-      failed.push({ id, error })
-    }
-  }
-
-  statusText.textContent = ''
-  setBusy(false)
-
+function summarize(succeeded: number, failed: { error: string }[]): string {
   if (failed.length === 0) {
-    showToast(`${succeeded} comment${succeeded === 1 ? '' : 's'} hidden`)
-  } else {
-    const firstError = failed[0]?.error ?? ''
-    const reason = firstError === 'PAT_MISSING' ? '(set PAT in popup)' : `(${firstError})`
-    showToast(`${succeeded} hidden, ${failed.length} failed ${reason}`)
+    return `${succeeded} comment${succeeded === 1 ? '' : 's'} hidden`
   }
+  const firstError = failed[0]?.error ?? ''
+  return `${succeeded} hidden, ${failed.length} failed (${firstError})`
 }
 
-function sendMinimize(
-  subjectId: string,
-  classifier: ReportedContentClassifier,
-): Promise<MinimizeResponse> {
-  const request: MinimizeRequest = { type: 'MINIMIZE_COMMENT', subjectId, classifier }
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage(request, (response: MinimizeResponse | undefined) => {
-      const err = chrome.runtime.lastError
-      if (err) {
-        resolve({ ok: false, error: err.message ?? 'runtime error' })
-        return
-      }
-      if (!response) {
-        resolve({ ok: false, error: 'no response from background' })
-        return
-      }
-      resolve(response)
-    })
-  })
-}
-
-function setBusy(busy: boolean) {
-  hideButton.disabled = busy
-  clearButton.disabled = busy
-  classifierSelect.disabled = busy
-}
+let toastEl: HTMLDivElement | null = null
+let toastTimer: number | undefined
 
 function showToast(message: string) {
   if (!toastEl) {
@@ -132,7 +120,9 @@ function showToast(message: string) {
   }
   toastEl.textContent = message
   toastEl.classList.add('pcs-toast-visible')
-  setTimeout(() => {
+  if (toastTimer !== undefined) clearTimeout(toastTimer)
+  toastTimer = window.setTimeout(() => {
     toastEl?.classList.remove('pcs-toast-visible')
+    toastTimer = undefined
   }, 3000)
 }

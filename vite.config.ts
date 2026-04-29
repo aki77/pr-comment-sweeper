@@ -6,11 +6,6 @@ export default defineConfig({
   plugins: [crx({ manifest })],
   build: {
     target: 'es2022',
-    rollupOptions: {
-      input: {
-        popup: 'src/popup/index.html',
-      },
-    },
   },
   server: {
     port: 5173,

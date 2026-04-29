@@ -1,6 +1,7 @@
 export type ReportedContentClassifier =
   | 'ABUSE'
   | 'DUPLICATE'
+  | 'LOW_QUALITY'
   | 'OFF_TOPIC'
   | 'OUTDATED'
   | 'RESOLVED'
@@ -11,6 +12,7 @@ export const CLASSIFIER_OPTIONS: { value: ReportedContentClassifier; label: stri
   { value: 'RESOLVED', label: 'Resolved' },
   { value: 'OFF_TOPIC', label: 'Off-topic' },
   { value: 'DUPLICATE', label: 'Duplicate' },
+  { value: 'LOW_QUALITY', label: 'Low quality' },
   { value: 'SPAM', label: 'Spam' },
   { value: 'ABUSE', label: 'Abuse' },
 ]

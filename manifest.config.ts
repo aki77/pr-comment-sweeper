@@ -6,23 +6,15 @@ export default defineManifest({
   name: 'PR Comment Sweeper',
   version: pkg.version,
   description: 'Bulk-hide GitHub PR review comments',
-  action: {
-    default_popup: 'src/popup/index.html',
-    default_title: 'PR Comment Sweeper',
-  },
-  background: {
-    service_worker: 'src/background/index.ts',
-    type: 'module',
-  },
   content_scripts: [
     {
-      matches: ['https://github.com/*/*/pull/*'],
-      js: ['src/content/index.ts'],
+      matches: [
+        'https://github.com/*/*/pull/*',
+      ],
+      js: ['src/content/main.ts'],
       run_at: 'document_idle',
     },
   ],
-  permissions: ['storage'],
-  host_permissions: ['https://api.github.com/*'],
   icons: {
     16: 'icons/16.png',
     32: 'icons/32.png',

@@ -1,13 +1,10 @@
 .pcs-checkbox {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   margin: 0;
-  z-index: 5;
   cursor: pointer;
   accent-color: #1f6feb;
+  flex-shrink: 0;
 }
 
 #pcs-action-bar {
