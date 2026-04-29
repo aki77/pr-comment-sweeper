@@ -98,10 +98,41 @@ async function submitForm(action: string, body: FormData): Promise<ActionOutcome
   }
 }
 
-export function markCommentAsMinimized(commentEl: HTMLElement) {
+const CLASSIFIER_REASON: Record<string, string> = {
+  RESOLVED: 'resolved',
+  OUTDATED: 'outdated',
+  OFF_TOPIC: 'off-topic',
+  DUPLICATE: 'duplicate',
+  SPAM: 'spam',
+  ABUSE: 'abuse',
+  LOW_QUALITY: 'low quality',
+}
+
+export function markCommentAsMinimized(
+  commentEl: HTMLElement,
+  classifier: ReportedContentClassifier,
+) {
+  const reason = CLASSIFIER_REASON[classifier] ?? classifier.toLowerCase().replace(/_/g, ' ')
+
   commentEl.classList.remove('unminimized-comment')
   commentEl.classList.add('minimized-comment')
-  commentEl.style.opacity = '0.5'
+
+  // Hide all existing children and insert a collapsible summary row.
+  // Avoids touching GitHub's internal DOM structure for resilience to markup changes.
+  for (const child of commentEl.children) {
+    ;(child as HTMLElement).hidden = true
+  }
+
+  const summary = document.createElement('details')
+  summary.className = 'pcs-minimized-summary'
+  summary.innerHTML = `<summary>This comment was hidden (${reason}). <span class="pcs-show-link">Show</span></summary>`
+  summary.addEventListener('toggle', () => {
+    const hiding = !summary.open
+    for (const child of commentEl.children) {
+      if (child !== summary) (child as HTMLElement).hidden = hiding
+    }
+  })
+  commentEl.prepend(summary)
 }
 
 export function removeCommentFromDom(commentEl: HTMLElement) {

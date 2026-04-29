@@ -89,8 +89,6 @@ export function mountActionBar() {
       const request: ActionRequest =
         mode === 'hide' ? { action: 'hide', classifier } : { action: 'delete' }
 
-      const onSuccess = mode === 'hide' ? markCommentAsMinimized : removeCommentFromDom
-
       setBusy(true)
       let succeeded = 0
       let processed = 0
@@ -115,7 +113,8 @@ export function mountActionBar() {
         const outcome = await performAction(commentEl, request)
         if (outcome.ok) {
           succeeded += 1
-          onSuccess(commentEl)
+          if (mode === 'hide') markCommentAsMinimized(commentEl, classifier)
+          else removeCommentFromDom(commentEl)
           selection.unregister(id)
         } else {
           failed.push({ id, error: outcome.error })
