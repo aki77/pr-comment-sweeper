@@ -11,6 +11,11 @@ A Chrome extension that adds bulk hide and delete actions for GitHub pull reques
 - **Up to 5 concurrent requests** for fast batch processing
 - **Toast notifications** summarizing results after each batch
 
+## Limitations
+
+> [!IMPORTANT]
+> This extension only works on the **Conversation tab** of a pull request. Comments viewed in the **Files changed tab** are not supported.
+
 ## Installation
 
 1. Clone this repository
