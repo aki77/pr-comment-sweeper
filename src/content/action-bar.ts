@@ -1,12 +1,23 @@
-import { CLASSIFIER_OPTIONS, type ReportedContentClassifier } from '../types'
-import { markCommentAsMinimized, minimizeComment } from './minimize'
+import {
+  ACTION_LABELS,
+  type Action,
+  type ActionRequest,
+  markCommentAsMinimized,
+  performAction,
+  removeCommentFromDom,
+} from './actions'
 import { selection } from './selection'
+import { CLASSIFIER_OPTIONS, type ReportedContentClassifier } from '../types'
+
+const MAX_CONCURRENCY = 5
 
 let mounted = false
 
 export function mountActionBar() {
   if (mounted) return
   mounted = true
+
+  let currentMode: Action = 'hide'
 
   const bar = document.createElement('div')
   bar.id = 'pcs-action-bar'
@@ -28,48 +39,11 @@ export function mountActionBar() {
   const statusText = document.createElement('span')
   statusText.className = 'pcs-status'
 
-  const setBusy = (busy: boolean) => {
-    hideButton.disabled = busy
-    clearButton.disabled = busy
-    classifierSelect.disabled = busy
-  }
-
-  const runHide = async () => {
-    const ids = selection.values()
-    if (ids.length === 0) return
-    const classifier = classifierSelect.value as ReportedContentClassifier
-
-    setBusy(true)
-    let succeeded = 0
-    const failed: { id: string; error: string }[] = []
-
-    for (const [index, id] of ids.entries()) {
-      statusText.textContent = `${index + 1} / ${ids.length} hidden...`
-      const commentEl = selection.commentEl(id)
-      if (!commentEl) {
-        failed.push({ id, error: 'comment element gone' })
-        continue
-      }
-      const outcome = await minimizeComment(commentEl, classifier)
-      if (outcome.ok) {
-        succeeded += 1
-        markCommentAsMinimized(commentEl)
-        selection.delete(id)
-      } else {
-        failed.push({ id, error: outcome.error })
-      }
-    }
-
-    statusText.textContent = ''
-    setBusy(false)
-    showToast(summarize(succeeded, failed))
-  }
-
-  const hideButton = makeButton({
-    label: 'Hide',
-    primary: true,
+  const actionButton = makeButton({
+    label: ACTION_LABELS.hide.verb,
+    variant: 'primary',
     onClick: () => {
-      void runHide()
+      void runAction()
     },
   })
 
@@ -78,35 +52,170 @@ export function mountActionBar() {
     onClick: () => selection.clear(),
   })
 
-  bar.append(countBadge, classifierSelect, hideButton, clearButton, statusText)
+  const modeToggle = makeModeToggle((mode) => {
+    currentMode = mode
+    classifierSelect.disabled = mode === 'delete'
+    syncActionButtonAppearance(selection.values().length)
+  })
+
+  const setBusy = (busy: boolean) => {
+    actionButton.disabled = busy
+    clearButton.disabled = busy
+    classifierSelect.disabled = busy || currentMode === 'delete'
+    modeToggle.setDisabled(busy)
+  }
+
+  const syncActionButtonAppearance = (size: number) => {
+    const { verb } = ACTION_LABELS[currentMode]
+    actionButton.textContent = size > 0 ? `${verb} ${size}` : verb
+    actionButton.classList.toggle('pcs-btn-primary', currentMode === 'hide')
+    actionButton.classList.toggle('pcs-btn-danger', currentMode === 'delete')
+  }
+
+  const runAction = () =>
+    selection.batch(async () => {
+      const ids = selection.values()
+      if (ids.length === 0) return
+
+      if (currentMode === 'delete') {
+        const noun = ids.length === 1 ? 'comment' : 'comments'
+        const message = `${ids.length} ${noun} will be permanently deleted. This cannot be undone. Continue?`
+        if (!window.confirm(message)) return
+      }
+
+      const mode = currentMode
+      const { verbDone } = ACTION_LABELS[mode]
+      const classifier = classifierSelect.value as ReportedContentClassifier
+      const request: ActionRequest =
+        mode === 'hide' ? { action: 'hide', classifier } : { action: 'delete' }
+
+      const onSuccess = mode === 'hide' ? markCommentAsMinimized : removeCommentFromDom
+
+      setBusy(true)
+      let succeeded = 0
+      let processed = 0
+      const failed: { id: string; error: string }[] = []
+
+      let statusRaf = 0
+      const scheduleStatusUpdate = () => {
+        if (statusRaf) return
+        statusRaf = requestAnimationFrame(() => {
+          statusRaf = 0
+          statusText.textContent = `${processed} / ${ids.length} ${verbDone}...`
+        })
+      }
+      scheduleStatusUpdate()
+
+      const processOne = async (id: string) => {
+        const commentEl = selection.commentEl(id)
+        if (!commentEl) {
+          failed.push({ id, error: 'comment element gone' })
+          return
+        }
+        const outcome = await performAction(commentEl, request)
+        if (outcome.ok) {
+          succeeded += 1
+          onSuccess(commentEl)
+          selection.unregister(id)
+        } else {
+          failed.push({ id, error: outcome.error })
+        }
+      }
+
+      let cursor = 0
+      const worker = async () => {
+        while (cursor < ids.length) {
+          const i = cursor++
+          const id = ids[i]
+          if (id === undefined) return
+          await processOne(id)
+          processed += 1
+          scheduleStatusUpdate()
+        }
+      }
+      const concurrency = Math.min(MAX_CONCURRENCY, ids.length)
+      await Promise.all(Array.from({ length: concurrency }, () => worker()))
+
+      if (statusRaf) cancelAnimationFrame(statusRaf)
+      statusText.textContent = ''
+      setBusy(false)
+      showToast(summarize(mode, succeeded, failed))
+    })
+
+  bar.append(countBadge, modeToggle.root, classifierSelect, actionButton, clearButton, statusText)
   document.body.append(bar)
 
   selection.subscribe((size) => {
     bar.hidden = size === 0
     countBadge.textContent = `${size} selected`
-    hideButton.textContent = size > 0 ? `Hide ${size}` : 'Hide'
+    syncActionButtonAppearance(size)
   })
 }
 
+type ModeToggle = {
+  root: HTMLElement
+  setDisabled(disabled: boolean): void
+}
+
+function makeModeToggle(onChange: (mode: Action) => void): ModeToggle {
+  const root = document.createElement('fieldset')
+  root.className = 'pcs-mode'
+
+  const make = (mode: Action, checked: boolean) => {
+    const wrapper = document.createElement('label')
+    const input = document.createElement('input')
+    input.type = 'radio'
+    input.name = 'pcs-mode'
+    input.value = mode
+    input.checked = checked
+    input.addEventListener('change', () => {
+      if (input.checked) onChange(mode)
+    })
+    wrapper.append(input, document.createTextNode(ACTION_LABELS[mode].verb))
+    return { wrapper, input }
+  }
+
+  const hide = make('hide', true)
+  const del = make('delete', false)
+  root.append(hide.wrapper, del.wrapper)
+
+  return {
+    root,
+    setDisabled(disabled) {
+      hide.input.disabled = disabled
+      del.input.disabled = disabled
+    },
+  }
+}
+
+type ButtonVariant = 'primary' | 'danger' | 'default'
+
 function makeButton(opts: {
   label: string
-  primary?: boolean
+  variant?: ButtonVariant
   onClick: () => void
 }): HTMLButtonElement {
   const btn = document.createElement('button')
   btn.type = 'button'
-  btn.className = opts.primary ? 'pcs-btn pcs-btn-primary' : 'pcs-btn'
+  btn.className = 'pcs-btn'
+  if (opts.variant === 'primary') btn.classList.add('pcs-btn-primary')
+  else if (opts.variant === 'danger') btn.classList.add('pcs-btn-danger')
   btn.textContent = opts.label
   btn.addEventListener('click', opts.onClick)
   return btn
 }
 
-function summarize(succeeded: number, failed: { error: string }[]): string {
+function summarize(
+  mode: Action,
+  succeeded: number,
+  failed: { error: string }[],
+): string {
+  const { verbDone } = ACTION_LABELS[mode]
   if (failed.length === 0) {
-    return `${succeeded} comment${succeeded === 1 ? '' : 's'} hidden`
+    return `${succeeded} comment${succeeded === 1 ? '' : 's'} ${verbDone}`
   }
   const firstError = failed[0]?.error ?? ''
-  return `${succeeded} hidden, ${failed.length} failed (${firstError})`
+  return `${succeeded} ${verbDone}, ${failed.length} failed (${firstError})`
 }
 
 let toastEl: HTMLDivElement | null = null
