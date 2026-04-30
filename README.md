@@ -2,6 +2,8 @@
 
 A Chrome extension that adds bulk hide and delete actions for GitHub pull request review comments.
 
+![Demo](https://i.gyazo.com/b4382adfbee44f428f500afd83d71ff7.png)
+
 ## Features
 
 - **Select multiple comments** via per-comment checkboxes injected into the PR page
@@ -10,6 +12,11 @@ A Chrome extension that adds bulk hide and delete actions for GitHub pull reques
 - **Floating action bar** — appears when one or more comments are selected; shows selected count, mode toggle, reason selector, and status progress
 - **Up to 5 concurrent requests** for fast batch processing
 - **Toast notifications** summarizing results after each batch
+
+## Limitations
+
+> [!IMPORTANT]
+> This extension only works on the **Conversation tab** of a pull request. Comments viewed in the **Files changed tab** are not supported.
 
 ## Installation
 
